@@ -23,6 +23,8 @@ WD_EXPORT_OPTIMIZE_FOR_PRINT = 0        # WdExportOptimizeFor.wdExportOptimizeFo
 WD_EXPORT_RANGE_ALL_DOC = 0             # WdExportRange.wdExportAllDocument :contentReference[oaicite:11]{index=11}
 WD_EXPORT_ITEM_DOC_CONTENT = 0          # WdExportItem.wdExportDocumentContent :contentReference[oaicite:12]{index=12}
 WD_EXPORT_CREATE_HEADING_BOOKMARKS = 1  # WdExportCreateBookmarks.wdExportCreateHeadingBookmarks :contentReference[oaicite:13]{index=13}
+WD_BREAK_PAGE = 7                       # WdBreakType.wdPageBreak :contentReference[oaicite:14]{index=14}
+WD_COLLAPSE_END = 0                     # WdCollapseDirection.wdCollapseEnd :contentReference[oaicite:15]{index=15}
 
 
 # ----------------------------------------------------------------------
@@ -187,50 +189,64 @@ def export_to_pdf(doc, pdf_path: Path):
     )
 
 
-def convert_all_html_to_pdf(input_dir: str, output_dir: str, visible: bool = False):
+def _html_sort_key(path: Path):
+    """Sort numerically when file names are like '1.html', '2.html', etc."""
+    try:
+        return (0, int(path.stem))
+    except ValueError:
+        return (1, path.stem.lower())
+
+
+def convert_all_html_to_pdf(
+    input_dir: str,
+    output_dir: str,
+    output_filename: str = "combined_output.pdf",
+    visible: bool = False,
+):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
+    output_pdf = output_path / output_filename
 
     print(f"Input directory : {input_path}")
     print(f"Output directory: {output_path}")
+    print(f"Combined PDF   : {output_pdf}")
+
+    html_files = sorted(input_path.glob("*.html"), key=_html_sort_key)
+    if not html_files:
+        print("No HTML files found. Nothing to do.")
+        return
 
     word = win32.Dispatch("Word.Application")
     word.Visible = visible
 
+    output_doc = word.Documents.Add()
+
     try:
-        for html_file in sorted(input_path.glob("*.html")):
+        for index, html_file in enumerate(html_files):
             print(f"\nProcessing: {html_file.name}")
-            pdf_file = output_path / (html_file.stem + ".pdf")
-
             try:
-                doc = word.Documents.Open(str(html_file))
+                rng = output_doc.Content
+                rng.Collapse(Direction=WD_COLLAPSE_END)
 
-                # Page setup: A4 portrait, margins
-                set_page_setup(doc)
+                if index > 0:
+                    rng.InsertBreak(WD_BREAK_PAGE)
 
-                # Resize all images so they stay within A4 content area
-                resize_images_to_fit(doc)
-
-                # Apply header & footer with page numbers
-                apply_header_footer(doc)
-
-                # Export to PDF
-                export_to_pdf(doc, pdf_file)
-
-                print(f"  ✓ Saved: {pdf_file.name}")
-
-                # Close the document without saving changes to the .docx/.html
-                doc.Close(SaveChanges=False)
+                rng.InsertFile(str(html_file), ConfirmConversions=False)
+                print("  ✓ Inserted into combined document")
 
             except Exception as e:
                 print(f"  ✖ Failed for {html_file.name}: {e}")
-                try:
-                    # Ensure doc is closed if partially opened
-                    doc.Close(SaveChanges=False)
-                except Exception:
-                    pass
+
+        # After all files are inserted, apply the same formatting steps once.
+        set_page_setup(output_doc)
+        resize_images_to_fit(output_doc)
+        apply_header_footer(output_doc)
+
+        export_to_pdf(output_doc, output_pdf)
+        print(f"\nAll HTML files combined into: {output_pdf}")
 
     finally:
+        output_doc.Close(SaveChanges=False)
         word.Quit()
 
 
