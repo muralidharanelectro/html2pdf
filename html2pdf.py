@@ -1,245 +1,247 @@
 import os
 from pathlib import Path
-
 import win32com.client as win32
-from win32com.client import constants
+
+# ----------------------------------------------------------------------
+# CONFIGURATION
+# ----------------------------------------------------------------------
+HEADER_TEXT = "23BT521 CHEMICAL ENGINEERING LABORATORY FOR BIOTECHNOLOGISTS"
+FOOTER_TEXT = "GNANAMANI COLLEGE OF TECHNOLOGY"
+
+# Word numeric constants (no win32com.client.constants used)
+WD_PAPER_A4 = 7                         # WdPaperSize.wdPaperA4 :contentReference[oaicite:0]{index=0}
+WD_ORIENT_PORTRAIT = 0                  # WdOrientation.wdOrientPortrait :contentReference[oaicite:1]{index=1}
+WD_ALIGN_PARAGRAPH_LEFT = 0             # WdParagraphAlignment.wdAlignParagraphLeft :contentReference[oaicite:2]{index=2}
+WD_ALIGN_PARAGRAPH_CENTER = 1           # WdParagraphAlignment.wdAlignParagraphCenter :contentReference[oaicite:3]{index=3}
+WD_ALIGN_PARAGRAPH_RIGHT = 2            # WdParagraphAlignment.wdAlignParagraphRight :contentReference[oaicite:4]{index=4}
+WD_HEADER_FOOTER_PRIMARY = 1            # WdHeaderFooterIndex.wdHeaderFooterPrimary :contentReference[oaicite:5]{index=5}
+WD_FIELD_PAGE = 33                      # WdFieldType.wdFieldPage :contentReference[oaicite:6]{index=6}
+WD_COLOR_GRAY25 = 12632256              # WdColor.wdColorGray25 :contentReference[oaicite:7]{index=7}
+WD_COLOR_BLACK = 0                      # WdColor.wdColorBlack :contentReference[oaicite:8]{index=8}
+WD_EXPORT_FORMAT_PDF = 17               # WdExportFormat.wdExportFormatPDF :contentReference[oaicite:9]{index=9}
+WD_EXPORT_OPTIMIZE_FOR_PRINT = 0        # WdExportOptimizeFor.wdExportOptimizeForPrint :contentReference[oaicite:10]{index=10}
+WD_EXPORT_RANGE_ALL_DOC = 0             # WdExportRange.wdExportAllDocument :contentReference[oaicite:11]{index=11}
+WD_EXPORT_ITEM_DOC_CONTENT = 0          # WdExportItem.wdExportDocumentContent :contentReference[oaicite:12]{index=12}
+WD_EXPORT_CREATE_HEADING_BOOKMARKS = 1  # WdExportCreateBookmarks.wdExportCreateHeadingBookmarks :contentReference[oaicite:13]{index=13}
+
+
+# ----------------------------------------------------------------------
+# HELPERS
+# ----------------------------------------------------------------------
+def cm_to_points(cm: float) -> float:
+    """Convert centimeters to Word points."""
+    return cm * 28.3464567  # 1 cm ≈ 28.3464567 points
 
 
 def set_page_setup(doc):
-    """Set A4, portrait, and (optionally) margins and header/footer behaviour."""
+    """Set A4 portrait and reasonable margins."""
     ps = doc.PageSetup
 
-    # A4, portrait
-    ps.PaperSize = constants.wdPaperA4
-    ps.Orientation = constants.wdOrientPortrait
+    # A4 / Portrait
+    ps.PaperSize = WD_PAPER_A4
+    ps.Orientation = WD_ORIENT_PORTRAIT
 
-    # Ensure same header/footer on all pages
-    ps.DifferentFirstPageHeaderFooter = False
-    ps.OddAndEvenPagesHeaderFooter = False
+    # Margins (in points) – adjust if you want slightly different margins
+    ps.TopMargin = cm_to_points(2.5)
+    ps.BottomMargin = cm_to_points(2.0)
+    ps.LeftMargin = cm_to_points(2.5)
+    ps.RightMargin = cm_to_points(2.0)
 
-    # OPTIONAL: adjust margins here if you want (values in points; 1 inch = 72 pt)
-    # For example, ~2.5 cm ≈ 71 pt
-    # ps.TopMargin = 71
-    # ps.BottomMargin = 71
-    # ps.LeftMargin = 71
-    # ps.RightMargin = 71
-
-
-def apply_header_footer(doc):
-    """
-    Apply uniform header and footer on all sections:
-
-      HEADER  (right aligned, grey, italics, small font):
-        23BT521 CHEMICAL ENGINEERING LABORATORY FOR BIOTECHNOLOGISTS
-
-      FOOTER  (right aligned, grey, italics, small font):
-        GNANAMANI COLLEGE OF TECHNOLOGY
-
-      PAGE NUMBER (separate line, centered, bold, black, normal font):
-        dynamic page number starting from 1
-    """
-    header_text = "23BT521 CHEMICAL ENGINEERING LABORATORY FOR BIOTECHNOLOGISTS"
-    footer_text = "GNANAMANI COLLEGE OF TECHNOLOGY"
-
-    for idx, section in enumerate(doc.Sections, start=1):
-        # ------------------------
-        # HEADER: right aligned
-        # ------------------------
-        header_range = section.Headers(constants.wdHeaderFooterPrimary).Range
-        header_range.Text = header_text
-        header_range.ParagraphFormat.Alignment = constants.wdAlignParagraphRight
-
-        header_font = header_range.Font
-        header_font.Size = 9          # "small" font size
-        header_font.Italic = True
-        header_font.Color = constants.wdColorGrayText
-
-        # ------------------------
-        # FOOTER: right text + centered page number
-        # ------------------------
-        footer_obj = section.Footers(constants.wdHeaderFooterPrimary)
-        footer_range = footer_obj.Range
-
-        # Clear existing footer content
-        footer_range.Text = ""
-        footer_range.ParagraphFormat.Alignment = constants.wdAlignParagraphLeft  # reset
-
-        # 1) Insert college name (right aligned, grey, italics, small)
-        footer_range.Text = footer_text
-        footer_range.ParagraphFormat.Alignment = constants.wdAlignParagraphRight
-
-        footer_font = footer_range.Font
-        footer_font.Size = 9
-        footer_font.Italic = True
-        footer_font.Color = constants.wdColorGrayText
-        footer_font.Bold = False
-
-        # Move to end to add a new paragraph for the page number
-        footer_range.Collapse(constants.wdCollapseEnd)
-        footer_range.InsertParagraphAfter()
-        footer_range.Collapse(constants.wdCollapseEnd)
-
-        # 2) Page number paragraph: centered, bold, black, normal (non-italic)
-        page_range = footer_range
-        page_range.ParagraphFormat.Alignment = constants.wdAlignParagraphCenter
-
-        # Add PAGE field for dynamic numbering
-        field = page_range.Fields.Add(
-            Range=page_range,
-            Type=constants.wdFieldPage
-        )
-
-        page_font = page_range.Font
-        page_font.Size = 10          # slightly larger if you wish
-        page_font.Bold = True
-        page_font.Italic = False
-        page_font.Color = constants.wdColorAutomatic  # black
-
-        # Ensure page numbering starts at 1 for the first section
-        # and continues (or restarts) consistently.
-        pn = footer_obj.PageNumbers
-        if idx == 1:
-            pn.RestartNumberingAtSection = True
-            pn.StartingNumber = 1
-        else:
-            # Continue numbering by default in later sections
-            pn.RestartNumberingAtSection = False
+    # Header / footer distances
+    ps.HeaderDistance = cm_to_points(1.0)
+    ps.FooterDistance = cm_to_points(1.0)
 
 
 def resize_images_to_fit(doc):
     """
-    For all images (InlineShapes and Shapes), ensure they fit
-    inside the printable area (page size minus margins).
-    If an image is too large, scale it down while preserving aspect ratio.
+    Scale all images so they fit within the available A4 content
+    area (both horizontally and vertically).
     """
     ps = doc.PageSetup
-    page_width = ps.PageWidth       # in points
-    page_height = ps.PageHeight     # in points
 
-    max_width = page_width - ps.LeftMargin - ps.RightMargin
-    max_height = page_height - ps.TopMargin - ps.BottomMargin
+    content_width = ps.PageWidth - ps.LeftMargin - ps.RightMargin
+    content_height = (
+        ps.PageHeight
+        - ps.TopMargin
+        - ps.BottomMargin
+        - ps.HeaderDistance
+        - ps.FooterDistance
+    )
 
-    # Safety: avoid negative values in case of strange settings
-    max_width = max(max_width, 1)
-    max_height = max(max_height, 1)
+    if content_width <= 0 or content_height <= 0:
+        # Fallback if margins are misconfigured
+        content_width = ps.PageWidth * 0.9
+        content_height = ps.PageHeight * 0.8
 
-    def scale_shape(shape):
-        """Scale a single shape-like object if it is too large."""
+    # InlineShapes (images in text flow)
+    for ish in list(doc.InlineShapes):
         try:
-            w = shape.Width
-            h = shape.Height
+            w = ish.Width
+            h = ish.Height
+            if w <= 0 or h <= 0:
+                continue
+
+            scale = min(1.0, content_width / w, content_height / h)
+            if scale < 1.0:
+                ish.Width = w * scale
+                ish.Height = h * scale
         except Exception:
-            return  # skip if shape has no dimension
-
-        if w <= 0 or h <= 0:
-            return
-
-        # Determine scale factor so that both width and height fit
-        scale_w = max_width / w
-        scale_h = max_height / h
-        scale = min(1.0, scale_w, scale_h)  # only scale down (never enlarge)
-
-        if scale < 1.0:
-            try:
-                shape.LockAspectRatio = False
-            except Exception:
-                pass
-
-            shape.Width = w * scale
-            shape.Height = h * scale
-
-    # Inline images
-    for ishape in doc.InlineShapes:
-        scale_shape(ishape)
+            # Ignore problematic shapes and continue
+            continue
 
     # Floating shapes
-    for shp in doc.Shapes:
-        scale_shape(shp)
+    for shp in list(doc.Shapes):
+        try:
+            # Only resize if it has meaningful dimensions
+            w = shp.Width
+            h = shp.Height
+            if w <= 0 or h <= 0:
+                continue
+
+            scale = min(1.0, content_width / w, content_height / h)
+            if scale < 1.0:
+                shp.Width = w * scale
+                shp.Height = h * scale
+        except Exception:
+            continue
 
 
-def convert_all_html_to_pdf(input_dir=".", output_dir=None, visible=False):
+def apply_header_footer(doc):
     """
-    Converts all .html and .htm files in `input_dir` to PDF using Microsoft Word.
-    - Sets A4 page size and portrait orientation.
-    - Rescales images to fit inside page margins.
-    - Adds required header and footer (right aligned).
-    - Adds dynamic page numbers in footer (centered, bold, black, starting at 1).
+    Apply:
+    - Header (right, grey, italic, small) with HEADER_TEXT
+    - Footer with:
+        1) Page number centered, bold, black
+        2) FOOTER_TEXT right, grey, italic, small
+    to every section.
     """
-    input_path = Path(input_dir).resolve()
-    if output_dir is None:
-        output_path = input_path
-    else:
-        output_path = Path(output_dir).resolve()
-        output_path.mkdir(parents=True, exist_ok=True)
+    for section in doc.Sections:
+        # ----------------- HEADER -----------------
+        header = section.Headers(WD_HEADER_FOOTER_PRIMARY)
+        h_range = header.Range
+        h_range.Text = HEADER_TEXT
+        h_range.ParagraphFormat.Alignment = WD_ALIGN_PARAGRAPH_RIGHT
+
+        h_font = h_range.Font
+        h_font.Size = 9
+        h_font.Italic = True
+        h_font.Color = WD_COLOR_GRAY25
+
+        # ----------------- FOOTER -----------------
+        footer = section.Footers(WD_HEADER_FOOTER_PRIMARY)
+        f_range = footer.Range
+
+        # Clear existing footer content
+        f_range.Text = ""
+
+        # 1) Page number paragraph (centered, bold, black)
+        # After setting Text = "", footer.Range still has one empty paragraph.
+        page_para = footer.Range.Paragraphs(1)
+        page_rng = page_para.Range
+
+        page_rng.Text = ""  # ensure empty before inserting field
+        page_rng.ParagraphFormat.Alignment = WD_ALIGN_PARAGRAPH_CENTER
+
+        p_font = page_rng.Font
+        p_font.Bold = True
+        p_font.Italic = False
+        p_font.Color = WD_COLOR_BLACK
+
+        # Add PAGE field
+        page_rng.Fields.Add(page_rng, WD_FIELD_PAGE)
+
+        # Ensure a new paragraph after the page number
+        page_rng.InsertParagraphAfter()
+
+        # 2) Footer text paragraph (right, grey, italic, small)
+        all_paras = footer.Range.Paragraphs
+        footer_para = all_paras(all_paras.Count)  # last paragraph
+        footer_rng = footer_para.Range
+
+        footer_rng.Text = FOOTER_TEXT
+        footer_rng.ParagraphFormat.Alignment = WD_ALIGN_PARAGRAPH_RIGHT
+
+        f_font = footer_rng.Font
+        f_font.Size = 9
+        f_font.Italic = True
+        f_font.Color = WD_COLOR_GRAY25
+
+
+def export_to_pdf(doc, pdf_path: Path):
+    """Export the active Word document to PDF with print-quality settings."""
+    doc.ExportAsFixedFormat(
+        OutputFileName=str(pdf_path),
+        ExportFormat=WD_EXPORT_FORMAT_PDF,
+        OpenAfterExport=False,
+        OptimizeFor=WD_EXPORT_OPTIMIZE_FOR_PRINT,
+        Range=WD_EXPORT_RANGE_ALL_DOC,
+        From=1,
+        To=1,
+        Item=WD_EXPORT_ITEM_DOC_CONTENT,
+        IncludeDocProps=True,
+        KeepIRM=True,
+        CreateBookmarks=WD_EXPORT_CREATE_HEADING_BOOKMARKS,
+        DocStructureTags=True,
+        BitmapMissingFonts=True,
+        UseISO19005_1=False,
+    )
+
+
+def convert_all_html_to_pdf(input_dir: str, output_dir: str, visible: bool = False):
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
 
     print(f"Input directory : {input_path}")
     print(f"Output directory: {output_path}")
 
-    # Collect HTML files
-    html_files = sorted(
-        list(input_path.glob("*.html")) + list(input_path.glob("*.htm"))
-    )
-
-    if not html_files:
-        print("No HTML files found. Nothing to convert.")
-        return
-
-    # Start Word
     word = win32.Dispatch("Word.Application")
     word.Visible = visible
 
-    wdFormatPDF = 17
-
     try:
-        for html_file in html_files:
+        for html_file in sorted(input_path.glob("*.html")):
             print(f"\nProcessing: {html_file.name}")
             pdf_file = output_path / (html_file.stem + ".pdf")
 
-            # Open HTML
-            doc = word.Documents.Open(str(html_file))
-
             try:
-                # Page setup
+                doc = word.Documents.Open(str(html_file))
+
+                # Page setup: A4 portrait, margins
                 set_page_setup(doc)
 
-                # Header, footer, and page number
-                apply_header_footer(doc)
-
-                # Resize images
+                # Resize all images so they stay within A4 content area
                 resize_images_to_fit(doc)
 
+                # Apply header & footer with page numbers
+                apply_header_footer(doc)
+
                 # Export to PDF
-                print(f"  -> Exporting to: {pdf_file.name}")
-                doc.ExportAsFixedFormat(
-                    OutputFileName=str(pdf_file),
-                    ExportFormat=wdFormatPDF,
-                    OpenAfterExport=False,
-                    OptimizeFor=constants.wdExportOptimizeForPrint,
-                    Item=constants.wdExportDocumentContent,
-                    IncludeDocProps=True,
-                    KeepIRM=True,
-                    CreateBookmarks=constants.wdExportCreateHeadingBookmarks,
-                    DocStructureTags=True,
-                    BitmapMissingFonts=True,
-                    UseISO19005_1=False,  # set True for PDF/A
-                )
-                print("  ✔ Done")
+                export_to_pdf(doc, pdf_file)
+
+                print(f"  ✓ Saved: {pdf_file.name}")
+
+                # Close the document without saving changes to the .docx/.html
+                doc.Close(SaveChanges=False)
 
             except Exception as e:
                 print(f"  ✖ Failed for {html_file.name}: {e}")
-
-            finally:
-                doc.Close(False)
+                try:
+                    # Ensure doc is closed if partially opened
+                    doc.Close(SaveChanges=False)
+                except Exception:
+                    pass
 
     finally:
         word.Quit()
 
-    print("\nAll conversions finished.")
 
-
+# ----------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
-    # Adjust these paths if needed
-    INPUT_DIR = "."        # folder containing your HTML files
-    OUTPUT_DIR = None      # None = same folder; or e.g. r".\pdf_output"
+    # By default: process the current directory
+    # You can also hard-code your HTML folder path here if you prefer.
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    INPUT_DIR = base_dir
+    OUTPUT_DIR = base_dir
 
-    convert_all_html_to_pdf(INPUT_DIR, OUTPUT_DIR)
+    convert_all_html_to_pdf(INPUT_DIR, OUTPUT_DIR, visible=False)
